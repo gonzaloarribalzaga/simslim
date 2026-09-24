@@ -34,7 +34,7 @@ func ensure(ctx context.Context, set, udid string, desired map[string]bool, repo
 	}
 	persistent := PersistentOverridesSupported(d.OSVersion)
 	if len(desired) > 0 && !persistent {
-		return false, fmt.Errorf("iOS %s runtime cannot persist launchd disable overrides across reboot; simslim requires iOS 18.5 or newer, or `simslim on --no-reboot` to slim the current boot session only", d.OSVersion)
+		return false, fmt.Errorf("%s %s runtime cannot persist launchd disable overrides across reboot; simslim requires version 18.5 or newer, or `simslim on --no-reboot` to slim the current boot session only", d.PlatformName(), d.OSVersion)
 	}
 	// A shutdown device can be reconfigured by writing the overrides launchd_sim
 	// reads when it starts, which skips both the per-label launchctl spawns and
@@ -163,8 +163,8 @@ func countLost(after, desired, managed map[string]bool) int {
 }
 
 // PersistentOverridesSupported reports whether the runtime keeps launchd
-// disable overrides across reboot. iOS 17.x and 18.3 hold them in memory only
-// and come back stock; iOS 18.5 and newer are verified to persist them.
+// disable overrides across reboot. Versions before 18.5 hold them in memory
+// only and come back stock; 18.5 and newer persist them.
 func PersistentOverridesSupported(version string) bool {
 	parts := strings.SplitN(version, ".", 3)
 	if len(parts) < 2 {

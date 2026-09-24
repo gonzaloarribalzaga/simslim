@@ -11,6 +11,7 @@ struct SimulatorDevice: Decodable, Identifiable, Equatable {
   let udid: String
   let name: String
   let state: String
+  let platform: String?
   let osVersion: String
   let managedDisabled: Int?
   let managedTotal: Int
@@ -20,6 +21,8 @@ struct SimulatorDevice: Decodable, Identifiable, Equatable {
 
   var id: String { udid }
   var isBooted: Bool { state == "Booted" }
+  var platformName: String { platform == "tvOS" ? "tvOS" : "iOS" }
+  var platformIcon: String { platform == "tvOS" ? "appletv" : "iphone" }
 }
 
 struct SlimCategory: Decodable, Identifiable, Equatable {

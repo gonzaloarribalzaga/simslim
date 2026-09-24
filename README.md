@@ -1,8 +1,8 @@
 # simslim
 
-Run a lot more iOS simulators on one Mac by turning off the background daemons a simulator doesn't need.
+Run a lot more iOS and tvOS simulators on one Mac by turning off the background daemons a simulator doesn't need.
 
-A freshly booted iOS simulator starts around 180 background services: Siri, Spotlight indexing, photo analysis, News, wallpaper posters, iCloud sync, and so on. None of it matters when you're using the simulator for development, testing, or CI. simslim switches those services off, which cuts each simulator's memory roughly 4x. On the same laptop you go from a handful of simulators to a screenful.
+A freshly booted iOS or tvOS simulator starts many background services: Siri, Spotlight indexing, media analysis, iCloud sync, and so on. None of it matters when you're using the simulator for development, testing, or CI. simslim switches those services off, which cuts each simulator's memory roughly 4x. On the same laptop you go from a handful of simulators to a screenful.
 
 https://github.com/user-attachments/assets/f4665e41-43b4-49cd-9388-3da533e9fd7b
 
@@ -38,7 +38,7 @@ or
 go install github.com/mobai-app/simslim/cmd/simslim@latest
 ```
 
-macOS only, and you need Xcode with an iOS Simulator runtime, since simslim
+macOS only, and you need Xcode with an iOS or tvOS Simulator runtime, since simslim
 drives simulators through `xcrun simctl`.
 
 ## macOS app
@@ -235,11 +235,12 @@ cannot respawn, with no shutdown/boot cycle. It takes the same
 simslim on <udid> --no-reboot --profile ci.json
 ```
 
-On iOS 18.5 and newer this is simply the faster path; the disable overrides are
-stored as well, so the next boot comes up slim too. On iOS 17.x and 18.3, which
-cannot persist overrides, it is the only way to slim at all, and the state is
-gone at the next reboot: re-run it after every boot. `status` says so when it
-reads such a simulator, and `status --json` carries a `persistent` field.
+On iOS and tvOS 18.5 and newer this is simply the faster path; the disable
+overrides are stored as well, so the next boot comes up slim too. On older
+runtimes, which cannot persist overrides, it is the only way to slim at all,
+and the state is gone at the next reboot: re-run it after every boot. `status`
+says so when it reads such a simulator, and `status --json` carries a
+`persistent` field.
 
 Live slimming only moves toward more-disabled. Managed daemons already disabled
 beyond the profile are left alone, because starting a daemon again live would

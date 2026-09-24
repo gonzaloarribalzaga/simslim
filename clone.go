@@ -170,10 +170,12 @@ func RepairClonedDevice(ctx context.Context, sourceUDID, cloneUDID string) (err 
 	if source.Set != clone.Set {
 		return fmt.Errorf("source and clone must belong to the same simulator set")
 	}
-	if source.OSVersion != clone.OSVersion {
+	if source.PlatformName() != clone.PlatformName() || source.OSVersion != clone.OSVersion {
 		return fmt.Errorf(
-			"source and clone runtimes differ (iOS %s and iOS %s)",
+			"source and clone runtimes differ (%s %s and %s %s)",
+			source.PlatformName(),
 			source.OSVersion,
+			clone.PlatformName(),
 			clone.OSVersion,
 		)
 	}

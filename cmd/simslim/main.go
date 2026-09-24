@@ -36,7 +36,7 @@ func main() {
 	}
 
 	if runtime.GOOS != "darwin" {
-		fatal("simslim only works on macOS (it drives Apple's iOS simulators).")
+		fatal("simslim only works on macOS (it drives Apple's iOS and tvOS simulators).")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -104,7 +104,7 @@ func cmdList(ctx context.Context, cmd *cli.Command) error {
 		}
 		summaries = append(summaries, summary)
 		if !jsonOutput {
-			line := fmt.Sprintf("%s  %-22s iOS %-6s %s", d.UDID, truncate(d.Name, 22), d.OSVersion, tag)
+			line := fmt.Sprintf("%s  %-22s %-4s %-6s %s", d.UDID, truncate(d.Name, 22), d.PlatformName(), d.OSVersion, tag)
 			if d.Set != "" && d.Set != "default" {
 				line += "  (" + d.Set + ")"
 			}
@@ -507,7 +507,7 @@ func cmdDiskPlan(ctx context.Context, cmd *cli.Command) error {
 	for _, category := range plan.Categories {
 		availability := ""
 		if !category.CanClean {
-			availability = " (iOS-managed; measured only)"
+			availability = " (system-managed; measured only)"
 		}
 		fmt.Printf("  %-22s %8s%s\n", category.ID, humanBytes(category.Bytes), availability)
 	}
@@ -809,7 +809,7 @@ func cmdOn(ctx context.Context, cmd *cli.Command) error {
 }
 
 // onNoReboot is `on --no-reboot`: stop the profile's daemons now, no reboot.
-// The closing line says what the next boot brings, since on iOS < 18.5 the
+// The closing line says what the next boot brings, since on runtimes below 18.5 the
 // state is gone after a reboot and someone will otherwise report that as a bug.
 func onNoReboot(ctx context.Context, device simslim.Device, p simslim.Profile, report simslim.Reporter) error {
 	fmt.Fprintf(os.Stderr, "Slimming %s for this boot session: stopping %d background services without a reboot.\n", device.UDID, len(p.Desired()))
@@ -825,7 +825,7 @@ func onNoReboot(ctx context.Context, device simslim.Device, p simslim.Profile, r
 	if simslim.PersistentOverridesSupported(device.OSVersion) {
 		fmt.Println("The disable overrides are also stored, so the next boot should come up slim; `simslim verify` after a reboot confirms it.")
 	} else {
-		fmt.Printf("iOS %s cannot persist overrides: the simulator returns to stock at its next boot, so re-run this command after every boot.\n", device.OSVersion)
+		fmt.Printf("%s %s cannot persist overrides: the simulator returns to stock at its next boot, so re-run this command after every boot.\n", device.PlatformName(), device.OSVersion)
 	}
 	return nil
 }
@@ -946,7 +946,7 @@ func fatal(msg string) {
 }
 
 func usage() {
-	fmt.Print(`simslim runs more iOS simulators on the same Mac by disabling the
+	fmt.Print(`simslim runs more iOS and tvOS simulators on the same Mac by disabling the
 background daemons a simulator does not need.
 
 USAGE

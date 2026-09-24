@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-simslim runs many more iOS simulators on one Mac by disabling the background
+simslim runs many more iOS and tvOS simulators on one Mac by disabling the background
 daemons a simulator doesn't need, cutting each simulator's memory ~4x. It is a Go
 CLI plus a SwiftUI macOS app that wraps it. Everything is driven through
 `xcrun simctl`; the tool only ever touches the simulators you point it at, never
@@ -28,7 +28,7 @@ runs exactly this on macos-26 / Xcode 26.6, then builds and verifies the app bun
 
 Tests are pure unit tests (parsing, delta logic, allowlist invariants) — they do
 **not** boot real simulators, so they run anywhere. Only the app build and manual
-runs need Xcode + an iOS runtime.
+runs need Xcode + an iOS or tvOS runtime.
 
 ## Architecture
 

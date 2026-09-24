@@ -13,6 +13,7 @@ struct ContentView: View {
     return model.devices.filter {
       $0.name.localizedCaseInsensitiveContains(searchText)
         || $0.udid.localizedCaseInsensitiveContains(searchText)
+        || $0.platformName.localizedCaseInsensitiveContains(searchText)
         || $0.osVersion.localizedCaseInsensitiveContains(searchText)
     }
   }
@@ -317,12 +318,12 @@ struct ContentView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
           } else if filteredDevices.isEmpty {
             ContentUnavailableView(
-              searchText.isEmpty ? "No iOS Simulators" : "No Matches",
-              systemImage: "iphone.slash",
+              searchText.isEmpty ? "No iOS or tvOS Simulators" : "No Matches",
+              systemImage: "appletv.slash",
               description: Text(
                 searchText.isEmpty
-                  ? "Install an iOS Simulator runtime in Xcode."
-                  : "Try a different name, UDID, or iOS version.")
+                  ? "Install an iOS or tvOS Simulator runtime in Xcode."
+                  : "Try a different name, UDID, platform, or OS version.")
             )
             .frame(width: geometry.size.width, height: geometry.size.height)
           } else {
@@ -1261,7 +1262,7 @@ private struct SimulatorRow: View {
         .disabled(model.isBusy(device))
 
         HStack(spacing: 10) {
-          Image(systemName: "iphone")
+          Image(systemName: device.platformIcon)
             .font(.system(size: 19, weight: .medium))
             .foregroundStyle(device.isBooted ? Color.blue : Color.secondary)
             .frame(width: 35, height: 35)
@@ -1295,7 +1296,7 @@ private struct SimulatorRow: View {
         }
         .frame(minWidth: 255, maxWidth: .infinity, alignment: .leading)
 
-        Text("iOS \(device.osVersion)")
+        Text("\(device.platformName) \(device.osVersion)")
           .font(.subheadline)
           .frame(width: 74, alignment: .leading)
 

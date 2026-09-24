@@ -19,11 +19,12 @@ const ShutdownTimeout = 30 * time.Second
 // var, not a const, so `--boot-timeout` / SIMSLIM_BOOT_TIMEOUT can raise it for CI.
 var BootTimeout = 10 * time.Minute
 
-// Device is a simulator as reported by `simctl list`.
+// Device is a supported simulator as reported by `simctl list`.
 type Device struct {
 	UDID      string `json:"udid"`
 	Name      string `json:"name"`
 	State     string `json:"state"` // "Booted" or "Shutdown"
+	Platform  string `json:"platform"`
 	OSVersion string `json:"osVersion"`
 	Set       string `json:"set"`
 	DataPath  string `json:"-"`
@@ -121,14 +122,15 @@ func listDevicesInSet(ctx context.Context, set deviceSetInfo) ([]Device, error) 
 	}
 	var devices []Device
 	for runtime, ds := range parsed.Devices {
-		if !strings.Contains(runtime, "iOS") {
+		platform, version, supported := runtimePlatformAndVersion(runtime)
+		if !supported {
 			continue
 		}
 		for _, d := range ds {
 			if !d.IsAvailable {
 				continue
 			}
-			devices = append(devices, Device{UDID: d.UDID, Name: d.Name, State: d.State, OSVersion: osVersion(runtime), Set: set.name, DataPath: d.DataPath})
+			devices = append(devices, Device{UDID: d.UDID, Name: d.Name, State: d.State, Platform: platform, OSVersion: version, Set: set.name, DataPath: d.DataPath})
 		}
 	}
 	return devices, nil
@@ -176,13 +178,36 @@ func ListDevices(ctx context.Context) ([]Device, error) {
 	return devices, nil
 }
 
-// osVersion turns "com.apple.CoreSimulator.SimRuntime.iOS-26-5" into "26.5".
-func osVersion(runtime string) string {
-	i := strings.LastIndex(runtime, "iOS-")
-	if i < 0 {
-		return "?"
+// runtimePlatformAndVersion turns a CoreSimulator runtime identifier such as
+// "com.apple.CoreSimulator.SimRuntime.iOS-26-5" or
+// "com.apple.CoreSimulator.SimRuntime.tvOS-26-5" into its platform and
+// display version. SimSlim deliberately ignores the other simulator families,
+// whose launchd profiles are outside this tool's scope.
+func runtimePlatformAndVersion(runtime string) (platform, version string, supported bool) {
+	for _, candidate := range []string{"iOS", "tvOS"} {
+		prefix := candidate + "-"
+		i := strings.LastIndex(runtime, prefix)
+		if i >= 0 {
+			return candidate, strings.ReplaceAll(runtime[i+len(prefix):], "-", "."), true
+		}
 	}
-	return strings.ReplaceAll(runtime[i+len("iOS-"):], "-", ".")
+	return "", "?", false
+}
+
+// osVersion returns the display version for a supported runtime. It is kept as
+// a small compatibility helper for callers that only need the version.
+func osVersion(runtime string) string {
+	_, version, _ := runtimePlatformAndVersion(runtime)
+	return version
+}
+
+// PlatformName returns the user-facing platform name for a device. Older
+// callers constructing Device values without Platform remain iOS-compatible.
+func (d Device) PlatformName() string {
+	if d.Platform == "tvOS" {
+		return "tvOS"
+	}
+	return "iOS"
 }
 
 // findDevice locates a simulator by UDID. An empty set searches every known set.

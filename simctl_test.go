@@ -94,6 +94,54 @@ func TestFormatListError(t *testing.T) {
 	}
 }
 
+func TestRuntimePlatformAndVersion(t *testing.T) {
+	tests := []struct {
+		runtime        string
+		platform, want string
+		supported      bool
+	}{
+		{"com.apple.CoreSimulator.SimRuntime.iOS-26-5", "iOS", "26.5", true},
+		{"com.apple.CoreSimulator.SimRuntime.tvOS-26-0", "tvOS", "26.0", true},
+		{"com.apple.CoreSimulator.SimRuntime.watchOS-11-0", "", "?", false},
+		{"not-a-runtime", "", "?", false},
+	}
+	for _, tt := range tests {
+		platform, version, supported := runtimePlatformAndVersion(tt.runtime)
+		if platform != tt.platform || version != tt.want || supported != tt.supported {
+			t.Errorf("runtimePlatformAndVersion(%q) = (%q, %q, %t), want (%q, %q, %t)", tt.runtime, platform, version, supported, tt.platform, tt.want, tt.supported)
+		}
+	}
+}
+
+func TestListDevicesInSetIncludesTVOS(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+printf '%s\n' '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-5":[{"udid":"IOS","name":"iPhone","state":"Shutdown","isAvailable":true,"dataPath":"/tmp/ios"}],"com.apple.CoreSimulator.SimRuntime.tvOS-26-0":[{"udid":"TVOS","name":"Apple TV","state":"Booted","isAvailable":true,"dataPath":"/tmp/tvos"}],"com.apple.CoreSimulator.SimRuntime.watchOS-11-0":[{"udid":"WATCH","name":"Apple Watch","state":"Shutdown","isAvailable":true,"dataPath":"/tmp/watch"}]}}'
+`
+	if err := os.WriteFile(filepath.Join(dir, "xcrun"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	devices, err := listDevicesInSet(context.Background(), deviceSetInfo{name: "default"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(devices) != 2 {
+		t.Fatalf("listDevicesInSet() returned %d devices, want iOS and tvOS only: %#v", len(devices), devices)
+	}
+	got := map[string]Device{}
+	for _, device := range devices {
+		got[device.UDID] = device
+	}
+	if device := got["IOS"]; device.PlatformName() != "iOS" || device.OSVersion != "26.5" {
+		t.Errorf("iOS device = %#v", device)
+	}
+	if device := got["TVOS"]; device.PlatformName() != "tvOS" || device.OSVersion != "26.0" {
+		t.Errorf("tvOS device = %#v", device)
+	}
+}
+
 func TestParseClonedUDID(t *testing.T) {
 	const udid = "00000000-0000-0000-0000-000000000001"
 	got, err := parseClonedUDID([]byte("\n" + udid + "\n"))
