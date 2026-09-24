@@ -39,10 +39,13 @@ func TestManagedExcludesForbidden(t *testing.T) {
 
 func TestTVOSCatalogIsConservative(t *testing.T) {
 	categories := CategoriesForPlatform(PlatformTVOS)
-	if len(categories) != 1 || categories[0].ID != "telemetry" {
-		t.Fatalf("tvOS categories = %#v, want one telemetry category", categories)
+	if len(categories) != 6 {
+		t.Fatalf("tvOS categories = %d, want 6", len(categories))
 	}
 	managed := SlimmableSetForPlatform(PlatformTVOS)
+	if len(managed) != 27 {
+		t.Errorf("tvOS managed labels = %d, want 27", len(managed))
+	}
 	for _, label := range append(forbiddenLabels,
 		"com.apple.PineBoard",
 		"com.apple.TVSystemUIService",
@@ -50,6 +53,13 @@ func TestTVOSCatalogIsConservative(t *testing.T) {
 		"com.apple.mediaremoted",
 		"com.apple.tvremoted",
 		"com.apple.tvperipheralagent",
+		"com.apple.searchd",
+		"com.apple.assistantd",
+		"com.apple.itunesstored",
+		"com.apple.mediaanalysisd",
+		"com.apple.GameController.gamecontrollerd",
+		"com.apple.mobileassetd",
+		"com.apple.managedconfiguration.passcodenagd",
 	) {
 		if managed[label] {
 			t.Errorf("unsafe tvOS daemon %q is managed", label)
@@ -68,6 +78,16 @@ func TestPlatformCatalogsDoNotShareManagedLabels(t *testing.T) {
 		if !ios[label] {
 			t.Errorf("tvOS label %q lacks an existing service description", label)
 		}
+	}
+}
+
+func TestTVOSCategoryIDsAreUnique(t *testing.T) {
+	seen := map[string]bool{}
+	for _, category := range CategoriesForPlatform(PlatformTVOS) {
+		if seen[category.ID] {
+			t.Errorf("duplicate tvOS category ID %q", category.ID)
+		}
+		seen[category.ID] = true
 	}
 }
 

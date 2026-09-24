@@ -62,7 +62,36 @@ var tvOSFeatures = []Feature{
 		"com.apple.feedbackd",
 		"com.apple.geoanalyticsd",
 		"com.apple.rtcreportingd",
+		"com.apple.securityuploadd",
 		"com.apple.triald",
+		"com.apple.followupd",
+	}},
+	{ID: "web-services", Name: "Web push & associated domains", Labels: []string{
+		"com.apple.webkit.adattributiond",
+		"com.apple.webkit.webpushd",
+		"com.apple.swcd",
+	}},
+	{ID: "icloud-sync", Name: "iCloud background sync", Labels: []string{
+		"com.apple.cloudd",
+		"com.apple.cloudphotod",
+		"com.apple.ckdiscretionaryd",
+		"com.apple.syncdefaultsd",
+		"com.apple.communicationtrustd",
+	}},
+	{ID: "contacts-calendar", Name: "Calendar & Contacts", Labels: []string{
+		"com.apple.calaccessd",
+		"com.apple.contactsd",
+	}},
+	{ID: "family", Name: "Family & permissions", Labels: []string{
+		"com.apple.familycircled",
+		"com.apple.familynotification",
+		"com.apple.askpermissiond",
+	}},
+	{ID: "app-metadata", Name: "Tips, Maps & Game Services", Labels: []string{
+		"com.apple.MapKit.SnapshotService",
+		"com.apple.jetpackassetd",
+		"com.apple.tipsd",
+		"com.apple.gamed",
 	}},
 }
 

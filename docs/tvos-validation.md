@@ -1,8 +1,9 @@
 # tvOS 26.4 manual validation
 
-Run this procedure only against a disposable tvOS simulator. The initial tvOS
-catalog is deliberately limited to diagnostics and telemetry; it must not
-affect the TV home screen, playback, remote input, or Settings.
+Run this procedure only against a disposable tvOS simulator. The validated
+tvOS catalog covers telemetry, web, cloud-sync, Calendar/Contacts, Family, and
+low-interaction app metadata. It deliberately excludes TV home-screen,
+playback, remote-input, search, and Siri services.
 
 1. Find the installed runtime and create a fresh Apple TV simulator. Substitute
    the exact runtime identifier printed on the host if it differs.
@@ -35,11 +36,12 @@ affect the TV home screen, playback, remote input, or Settings.
    simslim verify "$SIMSLIM_TV_UDID"
    ```
 
-4. Confirm the UI remains usable and Settings still launches, then capture the
-   post-slim screen.
+4. Confirm the UI remains usable and Settings plus Preview Shell still launch,
+   then capture the post-slim screen.
 
    ```sh
    xcrun simctl launch "$SIMSLIM_TV_UDID" com.apple.TVSettings
+   xcrun simctl launch "$SIMSLIM_TV_UDID" com.apple.PreviewShell
    xcrun simctl io "$SIMSLIM_TV_UDID" screenshot /tmp/simslim-tvos-slim.png
    ```
 

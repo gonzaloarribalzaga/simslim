@@ -6,14 +6,16 @@ import (
 )
 
 func TestFeatureLabelsAreSlimmable(t *testing.T) {
-	slimmable := SlimmableSet()
-	for _, f := range Features {
-		if len(f.Labels) == 0 {
-			t.Errorf("feature %q has no labels", f.ID)
-		}
-		for _, l := range f.Labels {
-			if !slimmable[l] {
-				t.Errorf("feature %q names %q, which no category disables", f.ID, l)
+	for _, platform := range []Platform{PlatformIOS, PlatformTVOS} {
+		slimmable := SlimmableSetForPlatform(platform)
+		for _, f := range FeaturesForPlatform(platform) {
+			if len(f.Labels) == 0 {
+				t.Errorf("%s feature %q has no labels", platform, f.ID)
+			}
+			for _, l := range f.Labels {
+				if !slimmable[l] {
+					t.Errorf("%s feature %q names %q, which no category disables", platform, f.ID, l)
+				}
 			}
 		}
 	}

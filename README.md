@@ -2,7 +2,7 @@
 
 Run more iOS and tvOS simulators on one Mac by turning off background daemons a simulator does not need.
 
-A freshly booted iOS simulator starts many background services: Siri, Spotlight indexing, media analysis, iCloud sync, and more. simslim can switch those services off for development, testing, and CI, which cuts the measured iOS footprint roughly 4x. tvOS support uses a separate, conservative diagnostics-and-telemetry catalog; it makes no memory-savings claim yet.
+A freshly booted iOS simulator starts many background services: Siri, Spotlight indexing, media analysis, iCloud sync, and more. simslim can switch those services off for development, testing, and CI, which cuts the measured iOS footprint roughly 4x. tvOS support uses a separate, conservative 27-service catalog for telemetry, web, cloud-sync, Family, Calendar/Contacts, and low-interaction app metadata; it makes no memory-savings claim yet.
 
 https://github.com/user-attachments/assets/f4665e41-43b4-49cd-9388-3da533e9fd7b
 

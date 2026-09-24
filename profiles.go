@@ -374,16 +374,17 @@ var Categories = []Category{
 	},
 }
 
-// tvOSCategories intentionally contains only telemetry services that were
-// validated on a tvOS 26.4 simulator. It excludes the TV UI, remote-control,
-// media, accessibility, search, and Siri services until each can be proven
-// safe independently. Its memory impact is deliberately unmeasured (0).
+// tvOSCategories contains iOS-catalog labels that were validated on a tvOS
+// 26.4 simulator: each category was tested alone and then as the complete
+// combined profile across reboot, TV Settings, and Preview Shell. It excludes
+// TV UI, remote-control, media, accessibility, search, and Siri services until
+// each has dedicated acceptance coverage. Memory impact is unmeasured (0).
 var tvOSCategories = []Category{
 	{
 		ID:          "telemetry",
 		Name:        "Diagnostics & Telemetry",
-		Description: "Advertising privacy, diagnostics, feedback, and analytics services.",
-		Downside:    "Analytics, diagnostics, feedback, DeviceCheck, and promoted-content telemetry are unavailable.",
+		Description: "Advertising privacy, diagnostics, feedback, analytics, and software-update telemetry.",
+		Downside:    "Analytics, diagnostics, feedback, DeviceCheck, promoted-content, and follow-up telemetry are unavailable.",
 		Labels: []string{
 			"com.apple.ap.adprivacyd",
 			"com.apple.ap.promotedcontentd",
@@ -392,7 +393,66 @@ var tvOSCategories = []Category{
 			"com.apple.feedbackd",
 			"com.apple.geoanalyticsd",
 			"com.apple.rtcreportingd",
+			"com.apple.securityuploadd",
 			"com.apple.triald",
+			"com.apple.followupd",
+		},
+	},
+	{
+		ID:          "web",
+		Name:        "Web Privacy & Associated Domains",
+		Description: "Web ad-attribution, web-push, and associated-domain services.",
+		Downside:    "Web push and associated-domain workflows are unavailable.",
+		Labels: []string{
+			"com.apple.webkit.adattributiond",
+			"com.apple.webkit.webpushd",
+			"com.apple.swcd",
+		},
+	},
+	{
+		ID:          "icloud",
+		Name:        "iCloud Background Sync",
+		Description: "CloudKit, Photos, settings, and discretionary cloud synchronization.",
+		Downside:    "CloudKit, Photos, settings, and communication-trust sync are unavailable.",
+		Labels: []string{
+			"com.apple.cloudd",
+			"com.apple.cloudphotod",
+			"com.apple.ckdiscretionaryd",
+			"com.apple.syncdefaultsd",
+			"com.apple.communicationtrustd",
+		},
+	},
+	{
+		ID:          "pim",
+		Name:        "Calendar & Contacts",
+		Description: "Calendar and Contacts database services.",
+		Downside:    "Calendar and Contacts workflows may fail.",
+		Labels: []string{
+			"com.apple.calaccessd",
+			"com.apple.contactsd",
+		},
+	},
+	{
+		ID:          "family",
+		Name:        "Family & Permissions",
+		Description: "Family-sharing notifications and permission workflows.",
+		Downside:    "Family Sharing notifications and purchase permissions are unavailable.",
+		Labels: []string{
+			"com.apple.familycircled",
+			"com.apple.familynotification",
+			"com.apple.askpermissiond",
+		},
+	},
+	{
+		ID:          "apps",
+		Name:        "Tips, Maps & Game Services",
+		Description: "Tips, MapKit snapshots, game state, and app metadata services.",
+		Downside:    "Tips, MapKit snapshots, and Game Center-backed workflows may fail.",
+		Labels: []string{
+			"com.apple.MapKit.SnapshotService",
+			"com.apple.jetpackassetd",
+			"com.apple.tipsd",
+			"com.apple.gamed",
 		},
 	},
 }
