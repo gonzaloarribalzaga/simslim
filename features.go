@@ -51,8 +51,35 @@ var Features = []Feature{
 	{ID: "screen-time", Name: "Screen Time", Labels: []string{"com.apple.ScreenTimeAgent"}},
 }
 
+// tvOSFeatures only describes capabilities affected by the conservative tvOS
+// catalog. It intentionally does not claim coverage for TV UI or playback.
+var tvOSFeatures = []Feature{
+	{ID: "diagnostics", Name: "Diagnostics & telemetry", Labels: []string{
+		"com.apple.ap.adprivacyd",
+		"com.apple.ap.promotedcontentd",
+		"com.apple.devicecheckd",
+		"com.apple.diagnosticextensionsd",
+		"com.apple.feedbackd",
+		"com.apple.geoanalyticsd",
+		"com.apple.rtcreportingd",
+		"com.apple.triald",
+	}},
+}
+
+// FeaturesForPlatform returns the supported doctor checks for platform.
+func FeaturesForPlatform(platform Platform) []Feature {
+	if platform == PlatformTVOS {
+		return tvOSFeatures
+	}
+	return Features
+}
+
 func featureByID(id string) (Feature, bool) {
-	for _, f := range Features {
+	return featureByIDForPlatform(PlatformIOS, id)
+}
+
+func featureByIDForPlatform(platform Platform, id string) (Feature, bool) {
+	for _, f := range FeaturesForPlatform(platform) {
 		if f.ID == id {
 			return f, true
 		}
@@ -63,9 +90,14 @@ func featureByID(id string) (Feature, bool) {
 // resolveFeatures maps requested IDs to their Features, erroring on the first
 // unknown one so a typo in --requires fails loudly instead of passing silently.
 func ResolveFeatures(ids []string) ([]Feature, error) {
+	return ResolveFeaturesForPlatform(PlatformIOS, ids)
+}
+
+// ResolveFeaturesForPlatform maps requested doctor checks for platform.
+func ResolveFeaturesForPlatform(platform Platform, ids []string) ([]Feature, error) {
 	out := make([]Feature, 0, len(ids))
 	for _, id := range ids {
-		f, ok := featureByID(id)
+		f, ok := featureByIDForPlatform(platform, id)
 		if !ok {
 			return nil, fmt.Errorf("unknown feature %q (see `simslim doctor --list`)", id)
 		}

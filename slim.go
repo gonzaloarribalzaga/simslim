@@ -27,11 +27,25 @@ func (r Reporter) report(msg string) {
 // takes the far cheaper ensureOffline route, whatever state it starts in. Each
 // slow phase reports progress so the caller can show the user that a
 // multi-minute reconfigure is still working.
-func ensure(ctx context.Context, set, udid string, desired map[string]bool, report Reporter) (changed bool, err error) {
+// ensure preserves the iOS-only test and package compatibility path. Product
+// code must call ensureForPlatform after resolving the target device.
+func ensure(ctx context.Context, set, udid string, desired map[string]bool, report Reporter) (bool, error) {
+	return ensureForPlatform(ctx, set, udid, PlatformIOS, desired, report)
+}
+
+func ensureForPlatform(ctx context.Context, set, udid string, platform Platform, desired map[string]bool, report Reporter) (changed bool, err error) {
 	d, err := FindDevice(ctx, udid, set)
 	if err != nil {
 		return false, err
 	}
+	devicePlatform, ok := NormalizePlatform(d.Platform)
+	if !ok {
+		return false, fmt.Errorf("unsupported simulator platform %q", d.Platform)
+	}
+	if platform != devicePlatform {
+		return false, fmt.Errorf("profile targets %s but simulator is %s", platform, devicePlatform)
+	}
+	managed := managedSetForPlatform(devicePlatform)
 	persistent := PersistentOverridesSupported(d.OSVersion)
 	if len(desired) > 0 && !persistent {
 		return false, fmt.Errorf("%s %s runtime cannot persist launchd disable overrides across reboot; simslim requires version 18.5 or newer, or `simslim on --no-reboot` to slim the current boot session only", d.PlatformName(), d.OSVersion)
@@ -55,7 +69,7 @@ func ensure(ctx context.Context, set, udid string, desired map[string]bool, repo
 		if err != nil {
 			return false, err
 		}
-		if toDisable, toEnable := delta(live, desired, managedSet()); len(toDisable) == 0 && len(toEnable) == 0 {
+		if toDisable, toEnable := delta(live, desired, managed); len(toDisable) == 0 && len(toEnable) == 0 {
 			return false, nil
 		}
 		report.report("Shutting the simulator down to reconfigure it offline...")
@@ -68,7 +82,7 @@ func ensure(ctx context.Context, set, udid string, desired map[string]bool, repo
 		d.State = "Shutdown"
 	}
 	if d.State == "Shutdown" && persistent {
-		changed, err := ensureOffline(ctx, set, udid, desired, report)
+		changed, err := ensureOffline(ctx, set, udid, devicePlatform, desired, report)
 		if !errors.Is(err, errOfflineIneffective) {
 			// A device that started booted only gets here with a real delta.
 			return changed || booted, err
@@ -83,7 +97,7 @@ func ensure(ctx context.Context, set, udid string, desired map[string]bool, repo
 	if err != nil {
 		return false, err
 	}
-	toDisable, toEnable := delta(current, desired, managedSet())
+	toDisable, toEnable := delta(current, desired, managed)
 	if len(toDisable) == 0 && len(toEnable) == 0 {
 		return false, nil
 	}
@@ -110,7 +124,7 @@ func ensure(ctx context.Context, set, udid string, desired map[string]bool, repo
 	if err != nil {
 		return true, err
 	}
-	if lost := countLost(after, desired, managedSet()); lost > 0 {
+	if lost := countLost(after, desired, managed); lost > 0 {
 		return true, fmt.Errorf("the disable overrides did not survive the reboot (%d of %d changes lost)", lost, len(toDisable)+len(toEnable))
 	}
 	return true, nil
@@ -122,12 +136,13 @@ func ensure(ctx context.Context, set, udid string, desired map[string]bool, repo
 // state is read back from the booted device rather than trusted: the store is a
 // private CoreSimulator detail, so anything that stops it from working returns
 // errOfflineIneffective and the caller takes the supported path instead.
-func ensureOffline(ctx context.Context, set, udid string, desired map[string]bool, report Reporter) (changed bool, err error) {
+func ensureOffline(ctx context.Context, set, udid string, platform Platform, desired map[string]bool, report Reporter) (changed bool, err error) {
 	current, err := readDisabledStore(udid)
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", errOfflineIneffective, err)
 	}
-	toDisable, toEnable := delta(current, desired, managedSet())
+	managed := managedSetForPlatform(platform)
+	toDisable, toEnable := delta(current, desired, managed)
 	changed = len(toDisable) > 0 || len(toEnable) > 0
 	if changed {
 		report.report(fmt.Sprintf("Reconfiguring %d background services while the simulator is off...", len(toDisable)+len(toEnable)))
@@ -143,7 +158,7 @@ func ensureOffline(ctx context.Context, set, udid string, desired map[string]boo
 	if err != nil {
 		return changed, err
 	}
-	if lost := countLost(after, desired, managedSet()); lost > 0 {
+	if lost := countLost(after, desired, managed); lost > 0 {
 		return changed, fmt.Errorf("%d of %d offline overrides were not honoured at boot: %w", lost, len(toDisable)+len(toEnable), errOfflineIneffective)
 	}
 	return changed, nil
@@ -177,7 +192,11 @@ func PersistentOverridesSupported(version string) bool {
 
 // enableSlim disables the profile's daemons and boots the device slim.
 func EnableSlim(ctx context.Context, set, udid string, p Profile, report Reporter) (bool, error) {
-	return ensure(ctx, set, udid, p.Desired(), report)
+	platform, ok := NormalizePlatform(string(p.Platform))
+	if !ok {
+		return false, fmt.Errorf("unsupported profile platform %q", p.Platform)
+	}
+	return ensureForPlatform(ctx, set, udid, platform, p.Desired(), report)
 }
 
 // EnableSlimNoReboot slims the running boot session without a reboot: each
@@ -188,6 +207,21 @@ func EnableSlim(ctx context.Context, set, udid string, p Profile, report Reporte
 // disabled beyond the profile are left alone, because a live re-enable would
 // have to bootstrap each daemon again; `off` restores them with a reboot.
 func EnableSlimNoReboot(ctx context.Context, set, udid string, p Profile, report Reporter) (changed bool, err error) {
+	d, err := FindDevice(ctx, udid, set)
+	if err != nil {
+		return false, err
+	}
+	platform, ok := NormalizePlatform(string(p.Platform))
+	if !ok {
+		return false, fmt.Errorf("unsupported profile platform %q", p.Platform)
+	}
+	devicePlatform, ok := NormalizePlatform(d.Platform)
+	if !ok {
+		return false, fmt.Errorf("unsupported simulator platform %q", d.Platform)
+	}
+	if platform != devicePlatform {
+		return false, fmt.Errorf("profile targets %s but simulator is %s", platform, devicePlatform)
+	}
 	desired := p.Desired()
 	report.report("Booting the simulator (a first boot can take up to a minute)...")
 	if err := BootAndWait(ctx, set, udid); err != nil {
@@ -197,7 +231,7 @@ func EnableSlimNoReboot(ctx context.Context, set, udid string, p Profile, report
 	if err != nil {
 		return false, err
 	}
-	managed := managedSet()
+	managed := managedSetForPlatform(devicePlatform)
 	toDisable, extra := delta(current, desired, managed)
 	if len(extra) > 0 {
 		report.report(fmt.Sprintf("Leaving %d services disabled beyond this profile; only `simslim off` re-enables them.", len(extra)))
@@ -230,7 +264,15 @@ func EnableSlimNoReboot(ctx context.Context, set, udid string, p Profile, report
 
 // disableSlim re-enables every managed daemon, returning the device to stock.
 func DisableSlim(ctx context.Context, set, udid string, report Reporter) (bool, error) {
-	return ensure(ctx, set, udid, map[string]bool{}, report)
+	d, err := FindDevice(ctx, udid, set)
+	if err != nil {
+		return false, err
+	}
+	platform, ok := NormalizePlatform(d.Platform)
+	if !ok {
+		return false, fmt.Errorf("unsupported simulator platform %q", d.Platform)
+	}
+	return ensureForPlatform(ctx, set, udid, platform, map[string]bool{}, report)
 }
 
 // Status describes how slim a device currently is.
@@ -252,7 +294,11 @@ func ReadStatus(ctx context.Context, udid string) (Status, map[string]bool, erro
 }
 
 func ReadStatusForDevice(ctx context.Context, d Device) (Status, map[string]bool, error) {
-	managed := SlimmableSet()
+	platform, ok := NormalizePlatform(d.Platform)
+	if !ok {
+		return Status{}, nil, fmt.Errorf("unsupported simulator platform %q", d.Platform)
+	}
+	managed := SlimmableSetForPlatform(platform)
 	st := Status{ManagedTotal: len(managed), Booted: d.State == "Booted", Persistent: PersistentOverridesSupported(d.OSVersion)}
 	if !st.Booted {
 		return st, nil, fmt.Errorf("simulator must be booted to read its state (it is %s)", d.State)
@@ -272,8 +318,14 @@ func ReadStatusForDevice(ctx context.Context, d Device) (Status, map[string]bool
 // droppedCategories groups the disabled managed daemons by category, in category
 // order, omitting categories with nothing disabled.
 func DroppedCategories(disabled map[string]bool) []DroppedCategory {
+	return DroppedCategoriesForPlatform(PlatformIOS, disabled)
+}
+
+// DroppedCategoriesForPlatform groups disabled managed daemons by the
+// platform-specific categories that own them.
+func DroppedCategoriesForPlatform(platform Platform, disabled map[string]bool) []DroppedCategory {
 	var out []DroppedCategory
-	for _, c := range Categories {
+	for _, c := range CategoriesForPlatform(platform) {
 		var labels []string
 		for _, l := range c.Labels {
 			if disabled[l] {

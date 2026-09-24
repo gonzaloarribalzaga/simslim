@@ -68,6 +68,11 @@ func (w *watcher) scan(ctx context.Context) {
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].UDID < devices[j].UDID })
 	for _, d := range devices {
+		platform, ok := NormalizePlatform(d.Platform)
+		profilePlatform, profileOK := NormalizePlatform(string(w.p.Platform))
+		if !ok || !profileOK || platform != profilePlatform {
+			continue
+		}
 		if d.State != "Booted" {
 			// On iOS below 18.5 the no-reboot slim dies with the boot session,
 			// so a device that shut down comes back stock and needs slimming

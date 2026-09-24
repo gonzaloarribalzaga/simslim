@@ -71,7 +71,6 @@ func cmdList(ctx context.Context, cmd *cli.Command) error {
 		}
 		return devices[i].Name < devices[j].Name
 	})
-	managed := len(simslim.SlimmableSet())
 	memoryByUDID := map[string]simslim.Measurement{}
 	memoryErrors := map[string]string{}
 	if jsonOutput {
@@ -86,6 +85,11 @@ func cmdList(ctx context.Context, cmd *cli.Command) error {
 	summaries := make([]simslim.DeviceSummary, 0, len(devices))
 	for _, d := range devices {
 		tag := "shutdown"
+		platform, ok := simslim.NormalizePlatform(d.Platform)
+		if !ok {
+			return fmt.Errorf("unsupported simulator platform %q", d.Platform)
+		}
+		managed := len(simslim.SlimmableSetForPlatform(platform))
 		summary := simslim.DeviceSummary{Device: d, ManagedTotal: managed}
 		if d.State == "Booted" {
 			tag = "booted"
@@ -119,12 +123,17 @@ func cmdList(ctx context.Context, cmd *cli.Command) error {
 
 func cmdProfiles(_ context.Context, cmd *cli.Command) error {
 	jsonOutput := cmd.Bool("json")
+	platform, err := commandPlatform(cmd.String("platform"))
+	if err != nil {
+		return err
+	}
+	categories := simslim.CategoriesForPlatform(platform)
 	args := cmd.Args().Slice()
 	if len(args) > 1 {
 		return fmt.Errorf("profiles takes at most one category ID (see `simslim profiles`)")
 	}
 	if len(args) == 1 {
-		c, ok := simslim.CategoryByID(args[0])
+		c, ok := simslim.CategoryByIDForPlatform(platform, args[0])
 		if !ok {
 			return fmt.Errorf("unknown category %q (see `simslim profiles`)", args[0])
 		}
@@ -133,7 +142,7 @@ func cmdProfiles(_ context.Context, cmd *cli.Command) error {
 		}
 		fmt.Printf("%-14s %s\n", c.ID, c.Name)
 		fmt.Printf("               %s\n", c.Description)
-		fmt.Printf("               %d daemons · ~%d MB idle footprint when enabled\n", len(c.Labels), c.ApproxMemoryMB)
+		printCategoryMemory(c)
 		fmt.Printf("               When disabled: %s\n", c.Downside)
 		fmt.Println("\nDaemons:")
 		for _, l := range c.Labels {
@@ -149,23 +158,35 @@ func cmdProfiles(_ context.Context, cmd *cli.Command) error {
 		return nil
 	}
 	if jsonOutput {
-		return writeJSON(simslim.Categories)
+		return writeJSON(categories)
 	}
-	for _, c := range simslim.Categories {
+	for _, c := range categories {
 		fmt.Printf("%-14s %s\n", c.ID, c.Name)
-		fmt.Printf("               %d daemons · ~%d MB idle footprint when enabled\n", len(c.Labels), c.ApproxMemoryMB)
+		if c.ApproxMemoryMB > 0 {
+			fmt.Printf("               %d daemons · ~%d MB idle footprint when enabled\n", len(c.Labels), c.ApproxMemoryMB)
+		} else {
+			fmt.Printf("               %d daemons · memory impact not measured yet\n", len(c.Labels))
+		}
 		fmt.Printf("               When disabled: %s\n", c.Downside)
 		for _, service := range c.AlwaysEnabled {
 			fmt.Printf("               Always on: %s — %s\n", service.Label, service.Reason)
 		}
 	}
 	fmt.Printf("\n%d daemons across %d categories. Core workflow and deadlock-prone daemons are never disabled.\n",
-		len(simslim.SlimmableSet()), len(simslim.Categories))
-	fmt.Println("Memory estimates are iOS 26.5 clean-boot measurements; they vary by runtime and workload and are not additive.")
+		len(simslim.SlimmableSetForPlatform(platform)), len(categories))
+	if platform == simslim.PlatformIOS {
+		fmt.Println("Memory estimates are iOS 26.5 clean-boot measurements; they vary by runtime and workload and are not additive.")
+	} else {
+		fmt.Println("tvOS memory impact has not yet been measured; this catalog is intentionally conservative.")
+	}
 	return nil
 }
 
 func cmdNewProfile(_ context.Context, cmd *cli.Command) error {
+	platform, err := commandPlatform(cmd.String("platform"))
+	if err != nil {
+		return err
+	}
 	args := cmd.Args().Slice()
 	if len(args) > 1 {
 		return fmt.Errorf("profile takes an optional output path")
@@ -189,7 +210,7 @@ func cmdNewProfile(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("profile is interactive; run it in a terminal")
 	}
 
-	sp, err := runProfileWizard(os.Stdin, os.Stderr, enterRawMode)
+	sp, err := runProfileWizardForPlatform(os.Stdin, os.Stderr, enterRawMode, platform)
 	if err != nil {
 		if errors.Is(err, errWizardCancelled) {
 			fmt.Fprintln(os.Stderr, "Cancelled; no profile written.")
@@ -245,7 +266,15 @@ func cmdStatus(ctx context.Context, cmd *cli.Command) error {
 	}
 	var dropped []simslim.DroppedCategory
 	if showDropped {
-		dropped = simslim.DroppedCategories(disabled)
+		d, findErr := simslim.FindDevice(ctx, udid, "")
+		if findErr != nil {
+			return findErr
+		}
+		platform, platformErr := simslim.NormalizePlatform(d.Platform)
+		if !platformErr {
+			return fmt.Errorf("unsupported simulator platform %q", d.Platform)
+		}
+		dropped = simslim.DroppedCategoriesForPlatform(platform, disabled)
 	}
 	if jsonOutput {
 		return writeJSON(simslim.StatusOutput{Status: st, Verdict: verdict, Dropped: dropped})
@@ -274,7 +303,15 @@ func cmdVerify(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	p, err := simslim.BuildProfile(cmd.String("profile"), cmd.String("except"), cmd.String("keep"))
+	d, err := simslim.FindDevice(ctx, udid, "")
+	if err != nil {
+		return err
+	}
+	platform, ok := simslim.NormalizePlatform(d.Platform)
+	if !ok {
+		return fmt.Errorf("unsupported simulator platform %q", d.Platform)
+	}
+	p, err := simslim.BuildProfileForPlatform(cmd.String("profile"), cmd.String("except"), cmd.String("keep"), platform)
 	if err != nil {
 		return err
 	}
@@ -310,10 +347,15 @@ func cmdDoctor(ctx context.Context, cmd *cli.Command) error {
 		if cmd.Args().Len() != 0 {
 			return fmt.Errorf("doctor --list takes no arguments")
 		}
-		if jsonOutput {
-			return writeJSON(simslim.Features)
+		platform, err := commandPlatform(cmd.String("platform"))
+		if err != nil {
+			return err
 		}
-		for _, f := range simslim.Features {
+		features := simslim.FeaturesForPlatform(platform)
+		if jsonOutput {
+			return writeJSON(features)
+		}
+		for _, f := range features {
 			fmt.Printf("%-16s %-38s %s\n", f.ID, f.Name, strings.Join(f.Labels, ", "))
 		}
 		return nil
@@ -323,7 +365,15 @@ func cmdDoctor(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	features, err := simslim.ResolveFeatures(simslim.SplitList(cmd.String("requires")))
+	d, err := simslim.FindDevice(ctx, udid, "")
+	if err != nil {
+		return err
+	}
+	platform, ok := simslim.NormalizePlatform(d.Platform)
+	if !ok {
+		return fmt.Errorf("unsupported simulator platform %q", d.Platform)
+	}
+	features, err := simslim.ResolveFeaturesForPlatform(platform, simslim.SplitList(cmd.String("requires")))
 	if err != nil {
 		return err
 	}
@@ -751,14 +801,18 @@ func cmdOn(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	p, err := simslim.BuildProfile(cmd.String("profile"), cmd.String("except"), cmd.String("keep"))
-	if err != nil {
-		return err
-	}
 	// Resolve once: this pins the device's set (routing every simctl call below,
 	// including a parallel-testing clone), fails fast on an unknown UDID, and
 	// tells us whether to restore a shutdown state afterward.
 	device, err := simslim.FindDevice(ctx, udid, "")
+	if err != nil {
+		return err
+	}
+	platform, ok := simslim.NormalizePlatform(device.Platform)
+	if !ok {
+		return fmt.Errorf("unsupported simulator platform %q", device.Platform)
+	}
+	p, err := simslim.BuildProfileForPlatform(cmd.String("profile"), cmd.String("except"), cmd.String("keep"), platform)
 	if err != nil {
 		return err
 	}
@@ -835,13 +889,24 @@ func onNoReboot(ctx context.Context, device simslim.Device, p simslim.Profile, r
 // deleted per run: point --set at the parallel-testing device set and run this
 // alongside the test invocation.
 func cmdWatch(ctx context.Context, cmd *cli.Command) error {
-	p, err := simslim.BuildProfile(cmd.String("profile"), cmd.String("except"), cmd.String("keep"))
+	platform, err := commandPlatform(cmd.String("platform"))
+	if err != nil {
+		return err
+	}
+	if cmd.String("profile") != "" && cmd.String("platform") == "" {
+		p, loadErr := simslim.LoadSlimProfile(cmd.String("profile"))
+		if loadErr != nil {
+			return loadErr
+		}
+		platform = p.Platform
+	}
+	p, err := simslim.BuildProfileForPlatform(cmd.String("profile"), cmd.String("except"), cmd.String("keep"), platform)
 	if err != nil {
 		return err
 	}
 	report := simslim.Reporter(func(msg string) { fmt.Fprintln(os.Stderr, msg) })
 	sets := append([]string{"default", "testing"}, simslim.ExtraDeviceSetTokens()...)
-	fmt.Fprintf(os.Stderr, "Watching device sets [%s]; slimming each simulator no-reboot as it boots. Ctrl-C to stop.\n", strings.Join(sets, ", "))
+	fmt.Fprintf(os.Stderr, "Watching %s device sets [%s]; slimming each simulator no-reboot as it boots. Ctrl-C to stop.\n", platform, strings.Join(sets, ", "))
 	return simslim.Watch(ctx, p, cmd.Duration("interval"), report)
 }
 
@@ -914,6 +979,22 @@ func oneUDID(args []string) (string, error) {
 		return "", fmt.Errorf("expected exactly one simulator UDID (see `simslim list`)")
 	}
 	return args[0], nil
+}
+
+func commandPlatform(value string) (simslim.Platform, error) {
+	platform, ok := simslim.NormalizePlatform(value)
+	if !ok {
+		return "", fmt.Errorf("unsupported platform %q (supported: iOS, tvOS)", value)
+	}
+	return platform, nil
+}
+
+func printCategoryMemory(c simslim.Category) {
+	if c.ApproxMemoryMB > 0 {
+		fmt.Printf("               %d daemons · ~%d MB idle footprint when enabled\n", len(c.Labels), c.ApproxMemoryMB)
+		return
+	}
+	fmt.Printf("               %d daemons · memory impact not measured yet\n", len(c.Labels))
 }
 
 func truncate(s string, n int) string {

@@ -28,11 +28,22 @@ func VerifyProfile(ctx context.Context, udid string, p Profile) (VerifyResult, e
 	if d.State != "Booted" {
 		return VerifyResult{}, fmt.Errorf("simulator must be booted to read its state (it is %s)", d.State)
 	}
+	platform, ok := NormalizePlatform(d.Platform)
+	if !ok {
+		return VerifyResult{}, fmt.Errorf("unsupported simulator platform %q", d.Platform)
+	}
+	profilePlatform, ok := NormalizePlatform(string(p.Platform))
+	if !ok {
+		return VerifyResult{}, fmt.Errorf("unsupported profile platform %q", p.Platform)
+	}
+	if profilePlatform != platform {
+		return VerifyResult{}, fmt.Errorf("profile targets %s but simulator is %s", profilePlatform, platform)
+	}
 	disabled, err := readDisabled(ctx, d.Set, d.UDID)
 	if err != nil {
 		return VerifyResult{}, err
 	}
-	r := compareDisabled(disabled, p.Desired(), managedSet())
+	r := compareDisabled(disabled, p.Desired(), managedSetForPlatform(platform))
 	r.UDID = udid
 	return r, nil
 }

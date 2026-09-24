@@ -24,8 +24,8 @@ func newApp() *cli.Command {
 
 	commands := []*cli.Command{
 		{Name: "list", Flags: []cli.Flag{jsonFlag(), &cli.BoolFlag{Name: "booted", Usage: "only list booted simulators"}}, Action: cmdList},
-		{Name: "profiles", Flags: []cli.Flag{jsonFlag()}, Action: cmdProfiles},
-		{Name: "profile", Action: cmdNewProfile},
+		{Name: "profiles", Flags: []cli.Flag{jsonFlag(), &cli.StringFlag{Name: "platform", Usage: "catalog platform: iOS (default) or tvOS"}}, Action: cmdProfiles},
+		{Name: "profile", Flags: []cli.Flag{&cli.StringFlag{Name: "platform", Usage: "profile platform: iOS (default) or tvOS"}}, Action: cmdNewProfile},
 		{Name: "status", Flags: []cli.Flag{jsonFlag(), &cli.BoolFlag{Name: "dropped", Usage: "list the disabled launchd labels grouped by category"}}, Action: cmdStatus},
 		{Name: "verify", Flags: []cli.Flag{
 			jsonFlag(),
@@ -35,6 +35,7 @@ func newApp() *cli.Command {
 		}, Action: cmdVerify},
 		{Name: "doctor", Flags: []cli.Flag{
 			jsonFlag(),
+			&cli.StringFlag{Name: "platform", Usage: "feature catalog platform for --list: iOS (default) or tvOS"},
 			&cli.StringFlag{Name: "requires", Usage: "comma-separated feature IDs the simulator must support (see `simslim doctor --list`)"},
 			&cli.BoolFlag{Name: "list", Usage: "list every checkable feature and its backing daemons"},
 		}, Action: cmdDoctor},
@@ -67,6 +68,7 @@ func newApp() *cli.Command {
 			preserveBootStateFlag("return an initially shutdown simulator to shutdown after reconfiguration"),
 		}, Action: cmdOff},
 		{Name: "watch", Flags: []cli.Flag{
+			&cli.StringFlag{Name: "platform", Usage: "only slim this platform: iOS (default) or tvOS"},
 			&cli.StringFlag{Name: "profile", Usage: "apply a JSON profile file (mutually exclusive with --except/--keep)"},
 			&cli.StringFlag{Name: "except", Usage: "comma-separated category IDs to leave fully enabled (see `simslim profiles`)"},
 			&cli.StringFlag{Name: "keep", Usage: "comma-separated launchd labels to keep running"},

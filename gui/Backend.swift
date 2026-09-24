@@ -40,8 +40,9 @@ struct SimSlimBackend {
     try await decode([SimulatorDevice].self, arguments: ["list", "--json"])
   }
 
-  func categories() async throws -> [SlimCategory] {
-    try await decode([SlimCategory].self, arguments: ["profiles", "--json"])
+  func categories(platform: String = "iOS") async throws -> [SlimCategory] {
+    try await decode(
+      [SlimCategory].self, arguments: ["profiles", "--json", "--platform", platform])
   }
 
   func measure(udid: String) async throws -> SimulatorMeasurement {

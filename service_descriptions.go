@@ -207,10 +207,15 @@ var serviceDescriptionByLabel = map[string]string{
 }
 
 func init() {
-	for i := range Categories {
-		Categories[i].ServiceDescriptions = make(map[string]string, len(Categories[i].Labels))
-		for _, label := range Categories[i].Labels {
-			Categories[i].ServiceDescriptions[label] = serviceDescriptionByLabel[label]
+	populateServiceDescriptions(Categories)
+	populateServiceDescriptions(tvOSCategories)
+}
+
+func populateServiceDescriptions(categories []Category) {
+	for i := range categories {
+		categories[i].ServiceDescriptions = make(map[string]string, len(categories[i].Labels))
+		for _, label := range categories[i].Labels {
+			categories[i].ServiceDescriptions[label] = serviceDescriptionByLabel[label]
 		}
 	}
 }

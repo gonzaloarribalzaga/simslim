@@ -749,7 +749,9 @@ private struct ProfileSidebar: View {
               (model.keptCategoryIDs.isEmpty && model.keptServiceLabels.isEmpty) || model.isBusy)
         }
         Text(
-          "Sorted by estimated idle memory use. Enable categories your tests need; estimates vary and are not additive."
+          model.catalogPlatform == "tvOS"
+            ? "tvOS uses a conservative, validated service catalog. Memory impact has not been measured yet."
+            : "Sorted by estimated idle memory use. Enable categories your tests need; estimates vary and are not additive."
         )
         .font(.caption)
         .foregroundStyle(.secondary)

@@ -11,6 +11,7 @@ import (
 // SlimProfile is the on-disk profile applied with `simslim on --profile <path>`.
 // Except and Keep mirror the `--except` and `--keep` flags.
 type SlimProfile struct {
+	Platform    Platform `json:"platform,omitempty"`
 	Name        string   `json:"name,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Except      []string `json:"except,omitempty"`
@@ -34,17 +35,21 @@ func LoadSlimProfile(path string) (Profile, error) {
 
 // resolve turns a parsed SlimProfile into the validated Profile it selects.
 func (sp SlimProfile) resolve(path string) (Profile, error) {
-	p := Profile{ExceptCategories: map[string]bool{}, Keep: map[string]bool{}}
+	platform, ok := NormalizePlatform(string(sp.Platform))
+	if !ok {
+		return Profile{}, fmt.Errorf("profile %s: unsupported platform %q (supported: iOS, tvOS)", path, sp.Platform)
+	}
+	p := Profile{Platform: platform, ExceptCategories: map[string]bool{}, Keep: map[string]bool{}}
 	for _, id := range sp.Except {
 		if id = strings.TrimSpace(id); id == "" {
 			continue
 		}
-		if _, ok := CategoryByID(id); !ok {
+		if _, ok := CategoryByIDForPlatform(platform, id); !ok {
 			return Profile{}, fmt.Errorf("profile %s: unknown category %q (see `simslim profiles`)", path, id)
 		}
 		p.ExceptCategories[id] = true
 	}
-	slimmable := SlimmableSet()
+	slimmable := SlimmableSetForPlatform(platform)
 	for _, label := range sp.Keep {
 		if label = strings.TrimSpace(label); label == "" {
 			continue
@@ -73,20 +78,41 @@ func SplitList(s string) []string {
 // file is the single source of truth, so it cannot be combined with
 // --except/--keep.
 func BuildProfile(profilePath, except, keep string) (Profile, error) {
+	return BuildProfileForPlatform(profilePath, except, keep, PlatformIOS)
+}
+
+// BuildProfileForPlatform selects and validates a profile for one simulator
+// platform. A profile file must name the same platform (or omit it for the
+// legacy iOS default) before any device mutation can begin.
+func BuildProfileForPlatform(profilePath, except, keep string, platform Platform) (Profile, error) {
+	if _, ok := NormalizePlatform(string(platform)); !ok {
+		return Profile{}, fmt.Errorf("unsupported platform %q (supported: iOS, tvOS)", platform)
+	}
 	if profilePath != "" {
 		if except != "" || keep != "" {
 			return Profile{}, fmt.Errorf("--profile cannot be combined with --except or --keep")
 		}
-		return LoadSlimProfile(profilePath)
+		p, err := LoadSlimProfile(profilePath)
+		if err != nil {
+			return Profile{}, err
+		}
+		if p.Platform != platform {
+			return Profile{}, fmt.Errorf("profile targets %s but simulator is %s", p.Platform, platform)
+		}
+		return p, nil
 	}
-	p := Profile{ExceptCategories: map[string]bool{}, Keep: map[string]bool{}}
+	p := Profile{Platform: platform, ExceptCategories: map[string]bool{}, Keep: map[string]bool{}}
 	for _, id := range SplitList(except) {
-		if _, ok := CategoryByID(id); !ok {
+		if _, ok := CategoryByIDForPlatform(platform, id); !ok {
 			return Profile{}, fmt.Errorf("unknown category %q (see `simslim profiles`)", id)
 		}
 		p.ExceptCategories[id] = true
 	}
+	slimmable := SlimmableSetForPlatform(platform)
 	for _, l := range SplitList(keep) {
+		if !slimmable[l] {
+			return Profile{}, fmt.Errorf("%q is not a daemon any %s category disables (see `simslim profiles --platform %s`)", l, platform, platform)
+		}
 		p.Keep[l] = true
 	}
 	return p, nil

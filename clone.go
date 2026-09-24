@@ -27,8 +27,12 @@ type cloneFilesystem struct {
 // desiredCloneDisabled copies only labels SimSlim is allowed to disable. A
 // source may contain unrelated or obsolete launchd overrides; cloning must not
 // turn those into new SimSlim-managed state or propagate an unsafe override.
-func desiredCloneDisabled(disabled map[string]bool) map[string]bool {
-	slimmable := SlimmableSet()
+func desiredCloneDisabled(disabled map[string]bool, platforms ...Platform) map[string]bool {
+	platform := PlatformIOS
+	if len(platforms) > 0 {
+		platform = platforms[0]
+	}
+	slimmable := SlimmableSetForPlatform(platform)
 	desired := make(map[string]bool)
 	for label, isDisabled := range disabled {
 		if isDisabled && slimmable[label] {
@@ -83,7 +87,11 @@ func CloneDevice(ctx context.Context, udid, name string) (newUDID string, err er
 	if err != nil {
 		return "", fmt.Errorf("capture source service profile: %w", err)
 	}
-	desired := desiredCloneDisabled(disabled)
+	platform, ok := NormalizePlatform(source.Platform)
+	if !ok {
+		return "", fmt.Errorf("unsupported simulator platform %q", source.Platform)
+	}
+	desired := desiredCloneDisabled(disabled, platform)
 	if err := Shutdown(ctx, source.Set, udid); err != nil {
 		return "", fmt.Errorf("shutdown source before cloning: %w", err)
 	}
@@ -130,7 +138,7 @@ func CloneDevice(ctx context.Context, udid, name string) (newUDID string, err er
 	// Enforce the captured state instead of trusting a copied launchd database.
 	// ensure also clears any required-to-run label that happened to be disabled
 	// in the source, and verifies persistence across a reboot when it changes.
-	if _, err := ensure(ctx, source.Set, createdUDID, desired, nil); err != nil {
+	if _, err := ensureForPlatform(ctx, source.Set, createdUDID, platform, desired, nil); err != nil {
 		return "", fmt.Errorf("restore cloned service profile: %w", err)
 	}
 	if err := verifyRunningCloneDoesNotOpenSource(ctx, paths); err != nil {
@@ -246,8 +254,12 @@ func RepairClonedDevice(ctx context.Context, sourceUDID, cloneUDID string) (err 
 	if err != nil {
 		return fmt.Errorf("capture cloned service profile: %w", err)
 	}
-	desired := desiredCloneDisabled(disabled)
-	if _, err := ensure(ctx, clone.Set, cloneUDID, desired, nil); err != nil {
+	platform, ok := NormalizePlatform(clone.Platform)
+	if !ok {
+		return fmt.Errorf("unsupported simulator platform %q", clone.Platform)
+	}
+	desired := desiredCloneDisabled(disabled, platform)
+	if _, err := ensureForPlatform(ctx, clone.Set, cloneUDID, platform, desired, nil); err != nil {
 		return fmt.Errorf("restore repaired clone service profile: %w", err)
 	}
 	if err := verifyRunningCloneDoesNotOpenSource(ctx, paths); err != nil {

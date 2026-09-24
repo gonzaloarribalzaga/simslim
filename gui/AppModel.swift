@@ -4,6 +4,7 @@ import Foundation
 final class AppModel: ObservableObject {
   @Published private(set) var devices: [SimulatorDevice] = []
   @Published private(set) var categories: [SlimCategory] = []
+  @Published private(set) var catalogPlatform = "iOS"
   @Published private(set) var diskCleanupCategories: [DiskCleanupCategory] = []
   @Published private(set) var diskCleanupPlans: [String: SimulatorDiskCleanupPlan] = [:]
   @Published private(set) var measurements: [String: SimulatorMeasurement] = [:]
@@ -70,7 +71,9 @@ final class AppModel: ObservableObject {
   /// per-device actions (boot, rename, measure) do not, and stay live.
   var isBatchRunning: Bool { batchProgress != nil }
 
-  var canStartBatchOnSelection: Bool { !isBatchRunning && !isSelectionBusy }
+  var canStartBatchOnSelection: Bool {
+    !isBatchRunning && !isSelectionBusy && catalogPlatformIsReadyForSelection
+  }
 
   /// How many simulators a batch reconfigures at once. Each one drives a
   /// `simslim` subprocess that boots and reboots a simulator, so a small
@@ -95,6 +98,15 @@ final class AppModel: ObservableObject {
 
   var selectedDevices: [SimulatorDevice] {
     devices.filter { selectedUDIDs.contains($0.udid) }
+  }
+
+  private var selectedPlatform: String? {
+    let platforms = Set(selectedDevices.map(\.platformName))
+    return platforms.count == 1 ? platforms.first : nil
+  }
+
+  private var catalogPlatformIsReadyForSelection: Bool {
+    selectedPlatform == nil || selectedPlatform == catalogPlatform
   }
 
   var diskAnalysisCoversSelection: Bool {
@@ -160,7 +172,7 @@ final class AppModel: ObservableObject {
     do {
       if includeCategories || categories.isEmpty || diskCleanupCategories.isEmpty {
         async let newDevices = backend.devices()
-        async let newCategories = backend.categories()
+        async let newCategories = backend.categories(platform: catalogPlatform)
         async let newDiskCleanupCategories = backend.diskCleanupCategories()
         let loaded = try await (newDevices, newCategories, newDiskCleanupCategories)
         devices = loaded.0
@@ -221,17 +233,52 @@ final class AppModel: ObservableObject {
   func toggleSelection(_ udid: String) {
     if selectedUDIDs.contains(udid) {
       selectedUDIDs.remove(udid)
-    } else {
+    } else if let device = devices.first(where: { $0.udid == udid }) {
+      if let selectedPlatform, selectedPlatform != device.platformName {
+        recordFailure(
+          "Select simulators from one platform at a time. Clear the \(selectedPlatform) selection before choosing \(device.platformName).",
+          present: true)
+        return
+      }
       selectedUDIDs.insert(udid)
+      Task { await loadCategories(for: device.platformName) }
     }
   }
 
   func select(_ udids: Set<String>) {
-    selectedUDIDs = udids
+    let candidates = devices.filter { udids.contains($0.udid) }
+    let target = selectedPlatform ?? candidates.first?.platformName
+    guard let target else {
+      selectedUDIDs = []
+      return
+    }
+    let allowed = Set(candidates.filter { $0.platformName == target }.map(\.udid))
+    if allowed.count != candidates.count {
+      recordFailure(
+        "Select simulators from one platform at a time. Only \(target) simulators were selected.",
+        present: true)
+    }
+    selectedUDIDs = allowed
+    Task { await loadCategories(for: target) }
   }
 
   func clearSelection() {
     selectedUDIDs.removeAll()
+  }
+
+  private func loadCategories(for platform: String) async {
+    guard let backend, platform != catalogPlatform else { return }
+    do {
+      let loaded = try await backend.categories(platform: platform)
+      guard selectedPlatform == platform else { return }
+      categories = loaded
+      catalogPlatform = platform
+      resetProfile()
+    } catch {
+      recordFailure(
+        "Could not load the \(platform) service catalog: \(error.localizedDescription)",
+        present: true)
+    }
   }
 
   func setCategory(_ category: SlimCategory, keptEnabled: Bool) {
@@ -382,6 +429,11 @@ final class AppModel: ObservableObject {
   }
 
   func applyProfile(to devices: [SimulatorDevice]) async {
+    guard catalogPlatformIsReadyForSelection else {
+      recordFailure(
+        "Wait for the selected platform's service catalog to load before slimming.", present: true)
+      return
+    }
     await runBatch(action: "Applying", devices: devices, restoreToStock: false)
   }
 

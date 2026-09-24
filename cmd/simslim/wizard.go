@@ -70,6 +70,11 @@ func terminalRows(stty func(...string) *exec.Cmd) int {
 // kept off stdout so the JSON stays redirectable. enterRaw switches the terminal
 // into per-keystroke mode and reports its height (a no-op in tests).
 func runProfileWizard(in io.Reader, out io.Writer, enterRaw func() (func(), int, error)) (simslim.SlimProfile, error) {
+	return runProfileWizardForPlatform(in, out, enterRaw, simslim.PlatformIOS)
+}
+
+func runProfileWizardForPlatform(in io.Reader, out io.Writer, enterRaw func() (func(), int, error), platform simslim.Platform) (simslim.SlimProfile, error) {
+	categories := simslim.CategoriesForPlatform(platform)
 	r := bufio.NewReader(in)
 	readLine := func(label string) string {
 		fmt.Fprint(out, label)
@@ -88,14 +93,14 @@ func runProfileWizard(in io.Reader, out io.Writer, enterRaw func() (func(), int,
 	}
 	defer restore()
 
-	except, keep, cancelled := selectProfile(r, out, rows)
+	except, keep, cancelled := selectProfile(r, out, rows, categories)
 	if cancelled {
 		return simslim.SlimProfile{}, errWizardCancelled
 	}
 
 	// Catalog order, and drop keeps inside an enabled feature (redundant).
 	var exceptIDs, keptLabels []string
-	for _, c := range simslim.Categories {
+	for _, c := range categories {
 		if except[c.ID] {
 			exceptIDs = append(exceptIDs, c.ID)
 			continue
@@ -106,7 +111,7 @@ func runProfileWizard(in io.Reader, out io.Writer, enterRaw func() (func(), int,
 			}
 		}
 	}
-	return simslim.SlimProfile{Name: name, Description: description, Except: exceptIDs, Keep: keptLabels}, nil
+	return simslim.SlimProfile{Platform: platform, Name: name, Description: description, Except: exceptIDs, Keep: keptLabels}, nil
 }
 
 // key is a normalized keystroke from readKey.
@@ -159,7 +164,7 @@ func readKey(r *bufio.Reader) (key, rune) {
 
 // selectProfile runs the feature checklist: space keeps a whole feature, → drills
 // into its daemons. Returns the chosen Except and Keep sets. See the footer for keys.
-func selectProfile(r *bufio.Reader, out io.Writer, termRows int) (except, keep map[string]bool, cancelled bool) {
+func selectProfile(r *bufio.Reader, out io.Writer, termRows int, categories []simslim.Category) (except, keep map[string]bool, cancelled bool) {
 	except = map[string]bool{}
 	keep = map[string]bool{}
 	header := []string{
@@ -170,7 +175,7 @@ func selectProfile(r *bufio.Reader, out io.Writer, termRows int) (except, keep m
 	visible := viewportRows(termRows, len(header))
 	cursor, top := 0, 0
 	for {
-		rows := categoryRows(except, keep)
+		rows := categoryRows(except, keep, categories)
 		top = windowTop(top, cursor, visible, len(rows))
 		drawChecklist(out, header, rows, footer, cursor, top, visible)
 		k, ch := readKey(r)
@@ -184,13 +189,13 @@ func selectProfile(r *bufio.Reader, out io.Writer, termRows int) (except, keep m
 		case k == keyCancel, k == keyRune && (ch == 'q' || ch == 'Q'):
 			return nil, nil, true
 		case k == keySpace:
-			toggleMember(except, simslim.Categories[cursor].ID)
+			toggleMember(except, categories[cursor].ID)
 		case k == keyRight, k == keyRune && ch == 'l':
-			if selectDaemons(r, out, simslim.Categories[cursor], keep, termRows) {
+			if selectDaemons(r, out, categories[cursor], keep, termRows) {
 				return nil, nil, true
 			}
 		case k == keyRune && (ch == 'a' || ch == 'A'):
-			for _, c := range simslim.Categories {
+			for _, c := range categories {
 				except[c.ID] = true
 			}
 		case k == keyRune && (ch == 'n' || ch == 'N'):
@@ -241,9 +246,9 @@ func selectDaemons(r *bufio.Reader, out io.Writer, c simslim.Category, keep map[
 
 // categoryRows renders the feature list. Marker: [x] fully kept, [~] some daemons
 // kept, [ ] slimmed.
-func categoryRows(except, keep map[string]bool) []string {
-	rows := make([]string, len(simslim.Categories))
-	for i, c := range simslim.Categories {
+func categoryRows(except, keep map[string]bool, categories []simslim.Category) []string {
+	rows := make([]string, len(categories))
+	for i, c := range categories {
 		box := "[ ]"
 		suffix := ""
 		switch {

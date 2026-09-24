@@ -1,8 +1,8 @@
 # simslim
 
-Run a lot more iOS and tvOS simulators on one Mac by turning off the background daemons a simulator doesn't need.
+Run more iOS and tvOS simulators on one Mac by turning off background daemons a simulator does not need.
 
-A freshly booted iOS or tvOS simulator starts many background services: Siri, Spotlight indexing, media analysis, iCloud sync, and so on. None of it matters when you're using the simulator for development, testing, or CI. simslim switches those services off, which cuts each simulator's memory roughly 4x. On the same laptop you go from a handful of simulators to a screenful.
+A freshly booted iOS simulator starts many background services: Siri, Spotlight indexing, media analysis, iCloud sync, and more. simslim can switch those services off for development, testing, and CI, which cuts the measured iOS footprint roughly 4x. tvOS support uses a separate, conservative diagnostics-and-telemetry catalog; it makes no memory-savings claim yet.
 
 https://github.com/user-attachments/assets/f4665e41-43b4-49cd-9388-3da533e9fd7b
 
@@ -66,6 +66,7 @@ service or disk changes so the copy can serve as a backup.
 ```sh
 simslim list             # simulators and their slim status (--booted to filter)
 simslim profiles         # what a slim boot turns off
+simslim profiles --platform tvOS  # the conservative tvOS catalog
 simslim profiles <id>    # the launchd labels in one category
 simslim on <udid>        # slim a simulator and reboot it slim
 simslim on <udid> --no-reboot   # slim the current boot session, no reboot
@@ -161,6 +162,7 @@ per run. A `ci.json` and a `dev.json` can slim differently for each purpose:
 
 ```json
 {
+  "platform": "iOS",
   "name": "ci",
   "description": "UI test runs",
   "except": ["search", "store"],
@@ -172,11 +174,16 @@ per run. A `ci.json` and a `dev.json` can slim differently for each purpose:
 simslim on <udid> --profile ci.json
 ```
 
-`except` and `keep` mirror the flags of the same name; `name` and `description`
+`platform` is optional for legacy files and defaults to `iOS`; use `tvOS` only
+with the tvOS catalog. A profile cannot be applied to a simulator of another
+platform. `except` and `keep` mirror the flags of the same name; `name` and `description`
 are for whoever reads the file. Unknown fields, unknown category IDs, and labels
 that no category disables are rejected, so a typo fails loudly. `--profile` is the
 single source of truth for its run and cannot be combined with `--except` or
 `--keep`.
+
+For the disposable-simulator acceptance procedure behind the initial tvOS 26.4
+support, see [tvOS validation](docs/tvos-validation.md).
 
 To build one interactively, run `simslim profile ci.json`: name it, then use the
 arrow keys and space to tick whole features to keep enabled, or press `→` to open

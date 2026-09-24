@@ -37,6 +37,40 @@ func TestManagedExcludesForbidden(t *testing.T) {
 	}
 }
 
+func TestTVOSCatalogIsConservative(t *testing.T) {
+	categories := CategoriesForPlatform(PlatformTVOS)
+	if len(categories) != 1 || categories[0].ID != "telemetry" {
+		t.Fatalf("tvOS categories = %#v, want one telemetry category", categories)
+	}
+	managed := SlimmableSetForPlatform(PlatformTVOS)
+	for _, label := range append(forbiddenLabels,
+		"com.apple.PineBoard",
+		"com.apple.TVSystemUIService",
+		"UIKitApplication:com.apple.HeadBoard",
+		"com.apple.mediaremoted",
+		"com.apple.tvremoted",
+		"com.apple.tvperipheralagent",
+	) {
+		if managed[label] {
+			t.Errorf("unsafe tvOS daemon %q is managed", label)
+		}
+	}
+	for _, category := range categories {
+		if category.ApproxMemoryMB != 0 {
+			t.Errorf("tvOS category %q claims %d MB without a measurement", category.ID, category.ApproxMemoryMB)
+		}
+	}
+}
+
+func TestPlatformCatalogsDoNotShareManagedLabels(t *testing.T) {
+	ios := SlimmableSetForPlatform(PlatformIOS)
+	for label := range SlimmableSetForPlatform(PlatformTVOS) {
+		if !ios[label] {
+			t.Errorf("tvOS label %q lacks an existing service description", label)
+		}
+	}
+}
+
 // These are the launchd or bundle identifiers behind the live processes cited
 // in issue #30. None is part of a full slim profile: required and unsafe
 // services stay up, and system apps/extensions are not managed launchd labels.

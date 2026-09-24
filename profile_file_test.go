@@ -47,6 +47,29 @@ func TestLoadSlimProfileMinimal(t *testing.T) {
 	if len(p.ExceptCategories) != 0 || len(p.Keep) != 0 {
 		t.Errorf("empty profile selected %v / %v, want empty", p.ExceptCategories, p.Keep)
 	}
+	if p.Platform != PlatformIOS {
+		t.Errorf("legacy profile platform = %q, want iOS", p.Platform)
+	}
+}
+
+func TestTVOSProfilePlatformAndMismatch(t *testing.T) {
+	path := writeProfile(t, `{"platform":"tvOS","except":["telemetry"]}`)
+	p, err := LoadSlimProfile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Platform != PlatformTVOS || !p.ExceptCategories["telemetry"] {
+		t.Fatalf("tvOS profile = %#v", p)
+	}
+	if _, err := BuildProfileForPlatform(path, "", "", PlatformIOS); err == nil {
+		t.Error("iOS build accepted a tvOS profile")
+	}
+	if _, err := BuildProfileForPlatform(path, "", "", PlatformTVOS); err != nil {
+		t.Fatalf("tvOS build rejected tvOS profile: %v", err)
+	}
+	if _, err := BuildProfileForPlatform("", "", "com.apple.apsd", PlatformTVOS); err == nil {
+		t.Error("tvOS build accepted an iOS-only label")
+	}
 }
 
 func TestLoadSlimProfileRejects(t *testing.T) {

@@ -15,6 +15,7 @@ const (
 	bootedClone          = `{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-1":[{"udid":"AAAA","name":"clone-1","state":"Booted","isAvailable":true,"dataPath":"/tmp/a"}]}}`
 	shutdownClone        = `{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-1":[{"udid":"AAAA","name":"clone-1","state":"Shutdown","isAvailable":true,"dataPath":"/tmp/a"}]}}`
 	bootedAndStoppedPair = `{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-1":[{"udid":"AAAA","name":"clone-1","state":"Booted","isAvailable":true,"dataPath":"/tmp/a"},{"udid":"BBBB","name":"clone-2","state":"Shutdown","isAvailable":true,"dataPath":"/tmp/b"}]}}`
+	bootedIOSAndTVOS     = `{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-26-1":[{"udid":"IOS","name":"phone","state":"Booted","isAvailable":true,"dataPath":"/tmp/ios"}],"com.apple.CoreSimulator.SimRuntime.tvOS-26-4":[{"udid":"TVOS","name":"television","state":"Booted","isAvailable":true,"dataPath":"/tmp/tvos"}]}}`
 )
 
 // fakeDeviceList puts a fake xcrun on PATH that serves the device list from a
@@ -45,6 +46,25 @@ exit 0
 	}
 	rewrite(devices)
 	return rewrite
+}
+
+func TestWatchOnlySlimsItsProfilePlatform(t *testing.T) {
+	fakeDeviceList(t, bootedIOSAndTVOS)
+	var mu sync.Mutex
+	var slimmed []string
+	fake := func(_ context.Context, _, udid string, _ Profile, _ Reporter) (bool, error) {
+		mu.Lock()
+		slimmed = append(slimmed, udid)
+		mu.Unlock()
+		return true, nil
+	}
+	w := newTestWatcher(fake, nil)
+	w.p = Profile{Platform: PlatformTVOS}
+	w.scan(context.Background())
+	w.wg.Wait()
+	if !slices.Equal(slimmed, []string{"TVOS"}) {
+		t.Fatalf("tvOS watcher slimmed %v, want [TVOS]", slimmed)
+	}
 }
 
 func newTestWatcher(slim slimStrategy, report Reporter) *watcher {

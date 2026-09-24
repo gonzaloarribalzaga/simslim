@@ -2,6 +2,28 @@ package simslim
 
 import "sort"
 
+// Platform identifies a simulator runtime family supported by SimSlim.
+// iOS remains the default for backwards-compatible profiles and APIs.
+type Platform string
+
+const (
+	PlatformIOS  Platform = "iOS"
+	PlatformTVOS Platform = "tvOS"
+)
+
+// NormalizePlatform returns a supported platform name. An empty name is the
+// legacy iOS default.
+func NormalizePlatform(value string) (Platform, bool) {
+	switch Platform(value) {
+	case "", PlatformIOS:
+		return PlatformIOS, true
+	case PlatformTVOS:
+		return PlatformTVOS, true
+	default:
+		return "", false
+	}
+}
+
 // Category groups launchd daemon labels that a slim boot disables together.
 type Category struct {
 	ID                  string                 `json:"id"`
@@ -352,8 +374,44 @@ var Categories = []Category{
 	},
 }
 
+// tvOSCategories intentionally contains only telemetry services that were
+// validated on a tvOS 26.4 simulator. It excludes the TV UI, remote-control,
+// media, accessibility, search, and Siri services until each can be proven
+// safe independently. Its memory impact is deliberately unmeasured (0).
+var tvOSCategories = []Category{
+	{
+		ID:          "telemetry",
+		Name:        "Diagnostics & Telemetry",
+		Description: "Advertising privacy, diagnostics, feedback, and analytics services.",
+		Downside:    "Analytics, diagnostics, feedback, DeviceCheck, and promoted-content telemetry are unavailable.",
+		Labels: []string{
+			"com.apple.ap.adprivacyd",
+			"com.apple.ap.promotedcontentd",
+			"com.apple.devicecheckd",
+			"com.apple.diagnosticextensionsd",
+			"com.apple.feedbackd",
+			"com.apple.geoanalyticsd",
+			"com.apple.rtcreportingd",
+			"com.apple.triald",
+		},
+	},
+}
+
+// CategoriesForPlatform returns the mutation catalog for a supported platform.
+func CategoriesForPlatform(platform Platform) []Category {
+	if platform == PlatformTVOS {
+		return tvOSCategories
+	}
+	return Categories
+}
+
 func CategoryByID(id string) (Category, bool) {
-	for _, c := range Categories {
+	return CategoryByIDForPlatform(PlatformIOS, id)
+}
+
+// CategoryByIDForPlatform returns a platform-specific category by its stable ID.
+func CategoryByIDForPlatform(platform Platform, id string) (Category, bool) {
+	for _, c := range CategoriesForPlatform(platform) {
 		if c.ID == id {
 			return c, true
 		}
@@ -363,8 +421,13 @@ func CategoryByID(id string) (Category, bool) {
 
 // slimmableSet is every label a service profile may disable.
 func SlimmableSet() map[string]bool {
+	return SlimmableSetForPlatform(PlatformIOS)
+}
+
+// SlimmableSetForPlatform is every label a profile may disable on platform.
+func SlimmableSetForPlatform(platform Platform) map[string]bool {
 	set := make(map[string]bool)
-	for _, c := range Categories {
+	for _, c := range CategoriesForPlatform(platform) {
 		for _, l := range c.Labels {
 			set[l] = true
 		}
@@ -375,8 +438,12 @@ func SlimmableSet() map[string]bool {
 // managedSet is the complete mutation allowlist. Most labels are slimmable;
 // required labels may only transition back to enabled for compatibility.
 func managedSet() map[string]bool {
-	set := SlimmableSet()
-	for _, category := range Categories {
+	return managedSetForPlatform(PlatformIOS)
+}
+
+func managedSetForPlatform(platform Platform) map[string]bool {
+	set := SlimmableSetForPlatform(platform)
+	for _, category := range CategoriesForPlatform(platform) {
 		for _, service := range category.AlwaysEnabled {
 			set[service.Label] = true
 		}
@@ -386,6 +453,7 @@ func managedSet() map[string]bool {
 
 // Profile selects which managed daemons a slim boot should disable.
 type Profile struct {
+	Platform         Platform
 	ExceptCategories map[string]bool // category IDs to leave fully enabled
 	Keep             map[string]bool // individual labels to leave enabled
 }
@@ -393,8 +461,12 @@ type Profile struct {
 // desired returns the labels this profile wants disabled. Categories may share
 // labels, so a label stays enabled when any excepted category lists it.
 func (p Profile) Desired() map[string]bool {
-	set := SlimmableSet()
-	for _, c := range Categories {
+	platform, ok := NormalizePlatform(string(p.Platform))
+	if !ok {
+		return map[string]bool{}
+	}
+	set := SlimmableSetForPlatform(platform)
+	for _, c := range CategoriesForPlatform(platform) {
 		if !p.ExceptCategories[c.ID] {
 			continue
 		}

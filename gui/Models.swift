@@ -40,7 +40,7 @@ struct SlimCategory: Decodable, Identifiable, Equatable {
   }
 
   var approximateMemoryText: String {
-    "Uses ~\(approxMemoryMB) MB RAM"
+    approxMemoryMB > 0 ? "Uses ~\(approxMemoryMB) MB RAM" : "Memory impact not measured yet"
   }
 
   func serviceDescription(for label: String) -> String {
