@@ -1,9 +1,9 @@
 # tvOS 26.4 manual validation
 
-Run this procedure only against a disposable tvOS simulator. The validated
-tvOS catalog covers telemetry, web, cloud-sync, Calendar/Contacts, Family, and
-low-interaction app metadata. It deliberately excludes TV home-screen,
-playback, remote-input, search, and Siri services.
+Run this procedure only against a disposable tvOS simulator. The tvOS 26.4
+catalog mirrors the 170-label iOS catalog. A full-profile test validated boot,
+reboot persistence, TV Settings, and Preview Shell; it is not a replacement for
+testing remote input, media playback, Siri, StoreKit, or your own app.
 
 1. Find the installed runtime and create a fresh Apple TV simulator. Substitute
    the exact runtime identifier printed on the host if it differs.

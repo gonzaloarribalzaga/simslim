@@ -37,31 +37,23 @@ func TestManagedExcludesForbidden(t *testing.T) {
 	}
 }
 
-func TestTVOSCatalogIsConservative(t *testing.T) {
+func TestTVOSCatalogMirrorsIOSWithoutMemoryClaims(t *testing.T) {
 	categories := CategoriesForPlatform(PlatformTVOS)
-	if len(categories) != 6 {
-		t.Fatalf("tvOS categories = %d, want 6", len(categories))
+	if len(categories) != len(Categories) {
+		t.Fatalf("tvOS categories = %d, want %d", len(categories), len(Categories))
 	}
-	managed := SlimmableSetForPlatform(PlatformTVOS)
-	if len(managed) != 27 {
-		t.Errorf("tvOS managed labels = %d, want 27", len(managed))
+	ios := SlimmableSetForPlatform(PlatformIOS)
+	tvos := SlimmableSetForPlatform(PlatformTVOS)
+	if !reflect.DeepEqual(tvos, ios) {
+		t.Errorf("tvOS labels differ from the iOS catalog")
 	}
 	for _, label := range append(forbiddenLabels,
 		"com.apple.PineBoard",
 		"com.apple.TVSystemUIService",
 		"UIKitApplication:com.apple.HeadBoard",
-		"com.apple.mediaremoted",
-		"com.apple.tvremoted",
 		"com.apple.tvperipheralagent",
-		"com.apple.searchd",
-		"com.apple.assistantd",
-		"com.apple.itunesstored",
-		"com.apple.mediaanalysisd",
-		"com.apple.GameController.gamecontrollerd",
-		"com.apple.mobileassetd",
-		"com.apple.managedconfiguration.passcodenagd",
 	) {
-		if managed[label] {
+		if tvos[label] {
 			t.Errorf("unsafe tvOS daemon %q is managed", label)
 		}
 	}

@@ -67,8 +67,8 @@ func TestTVOSProfilePlatformAndMismatch(t *testing.T) {
 	if _, err := BuildProfileForPlatform(path, "", "", PlatformTVOS); err != nil {
 		t.Fatalf("tvOS build rejected tvOS profile: %v", err)
 	}
-	if _, err := BuildProfileForPlatform("", "", "com.apple.apsd", PlatformTVOS); err == nil {
-		t.Error("tvOS build accepted an iOS-only label")
+	if _, err := BuildProfileForPlatform("", "", "com.apple.apsd", PlatformTVOS); err != nil {
+		t.Errorf("tvOS build rejected a label from the mirrored iOS catalog: %v", err)
 	}
 }
 
